@@ -13,6 +13,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
+import shap
 
 app: FastAPI = FastAPI(title="Nocarz Long-Stay Predictor API")
 
@@ -21,6 +22,8 @@ MODEL_ADV: Any = joblib.load(BASE_PATH / "models/model_advanced.joblib")
 MODEL_BASE: Any = joblib.load(BASE_PATH / "models/model_baseline.joblib")
 FEATURES: list[str] = joblib.load(BASE_PATH / "models/model_features.joblib")
 LOG_FILE = os.getenv("LOG_PATH", "ab_test_logs.jsonl")
+# Initialize SHAP explainer at server start for performance
+EXPLAINER = shap.TreeExplainer(MODEL_ADV)
 
 class ListingData(BaseModel):
     accommodates: float
@@ -53,6 +56,7 @@ class PredictionResponse(BaseModel):
     request_id: str
     is_long_stay_probability: float
     assigned_group: str
+    top_deciding_factors: list[dict[str, Any]] | None = None
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(data: ListingData) -> PredictionResponse:
@@ -93,6 +97,25 @@ async def predict(data: ListingData) -> PredictionResponse:
         # 7. Predict positive-class probability (long stay).
         prediction: float = float(model.predict_proba(input_df)[0, 1])
 
+        # Explainability via SHAP - only for advanced model (group B)
+        top_factors: list[dict[str, Any]] = []
+        if model_group == "B":
+            # Compute SHAP values for the current request
+            shap_values = EXPLAINER.shap_values(input_df)
+            # Depending on SHAP/XGBoost version, shap_values may be list or array
+            vals = shap_values[0] if isinstance(shap_values, list) else shap_values[0]
+
+            # Pair feature names with their SHAP impact
+            feature_impacts = [(FEATURES[i], float(vals[i])) for i in range(len(FEATURES))]
+            feature_impacts.sort(key=lambda x: abs(x[1]), reverse=True)
+            for f_name, f_val in feature_impacts[:3]:
+                effect = "increases chance of long stay" if f_val > 0 else "decreases chance of long stay"
+                top_factors.append({
+                    "feature": f_name,
+                    "impact_value": round(f_val, 4),
+                    "business_interpretation": effect
+                })
+
         # 8. Log request metadata for later A/B evaluation.
         log_entry: dict[str, Any] = {
             "timestamp": datetime.datetime.now().isoformat(),
@@ -103,15 +126,17 @@ async def predict(data: ListingData) -> PredictionResponse:
         }
 
         # Append logs to a JSONL file (mounted via Docker volume in deployment).
-        with open("/app/logs/ab_test_logs.jsonl", "a") as f:
+        with open(LOG_FILE, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
 
         return PredictionResponse(
             status="success",
             request_id=request_id,
             is_long_stay_probability=round(prediction, 4),
-            assigned_group=model_group
+            assigned_group=model_group,
+            top_deciding_factors=top_factors if model_group == "B" else None
         )
+        
 
     except Exception as e:
         # Log runtime errors to container stdout for easier debugging.
