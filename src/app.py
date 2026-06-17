@@ -55,7 +55,6 @@ class PredictionResponse(BaseModel):
     status: str
     request_id: str
     is_long_stay_probability: float
-    assigned_group: str
     top_deciding_factors: list[dict[str, Any]] | None = None
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -133,7 +132,6 @@ async def predict(data: ListingData) -> PredictionResponse:
             status="success",
             request_id=request_id,
             is_long_stay_probability=round(prediction, 4),
-            assigned_group=model_group,
             top_deciding_factors=top_factors if model_group == "B" else None
         )
         

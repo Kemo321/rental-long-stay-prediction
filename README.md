@@ -16,17 +16,6 @@ Instead of just providing a binary prediction, the core business value of this s
 * **Key Metrics:** ROC AUC (Baseline: ~0.50, XGBoost: ~0.96), Average Precision, and successful SHAP ranking generation.
 * **A/B Testing:** The microservice implements a transparent A/B test (Baseline vs. XGBoost) with payload logging for continuous production evaluation.
 
-## Repository Structure
-* `/docs` - Contains the Machine Learning Canvas mapping out the business and technical architecture.
-* `/notebooks` - Jupyter notebooks containing:
-  * `analysis.ipynb` - Exploratory Data Analysis (EDA).
-  * `training.ipynb` - Model training, evaluation, and SHAP analysis.
-  * `generate_traffic.ipynb` - Script to simulate production traffic for the API.
-  * `ab_test_evaluation.ipynb` - Evaluation of the A/B test based on generated logs.
-* `/src` - Source code for data preprocessing (`data_prep.py`), trained models (`/models`), and the real-time FastAPI microservice (`app.py`).
-* `/logs` - JSONL logs (`ab_test_logs.jsonl`) collected from the microservice for ongoing A/B test evaluation.
-* `/results` - Exported graphs, SHAP plots, and CSV reports generated directly from the analytical notebooks.
-
 ## Tech Stack
 * **Data Analysis & ML:** `pandas`, `scikit-learn`, `xgboost`, `shap`, `matplotlib`, `seaborn`
 * **Deployment:** `FastAPI`, `uvicorn`, `Docker`, `Docker Compose`
@@ -69,13 +58,12 @@ curl -X 'POST' \
 }'
 ```
 
-**Example Response (Group B - XGBoost with Explainability):**
+**Example Response**
 ```json
 {
   "status": "success",
   "request_id": "4b92c4b5-4122-42da-95a9-4b82d338f07d",
   "is_long_stay_probability": 0.8214,
-  "assigned_group": "B",
   "top_deciding_factors": [
     {
       "feature": "lead_time_days",
